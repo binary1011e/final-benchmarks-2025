@@ -4,6 +4,12 @@ Benchmarks for the CSCI 1260 final project
 Open up a pull request on this repository to add a benchmark to the
 `benchmarks/` directory.
 
+You should add tests in pairs, a .lisp file with a matching .out file.
+
+Your tests should be named with your GitHub username:
+`<username>-<testname>.lisp` and `<username>-<testname>.out`.
+
+
 Benchmarking the final homework
 -------------------------------
 

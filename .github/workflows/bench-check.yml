@@ -1,0 +1,65 @@
+name: Validate Benchmark Files
+on: 
+    pull_request_target: 
+        types: [opened, review_requested, ready_for_review, edited, synchronize]
+    issue_comment:
+        types: [created, deleted]
+
+jobs:
+  check-benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get list of changed files
+        id: changed
+        run: |
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files \
+            --jq '.[].filename' >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Ensure all changes are under benchmarks/
+        run: |
+          BAD=$(echo "${{ steps.changed.outputs.files }}" | grep -v '^benchmarks/' || true)
+          if [[ -n "$BAD" ]]; then
+            echo "❌ The following files are outside benchmarks/:"
+            echo "$BAD"
+            exit 1
+          fi
+
+      - name: Validate filename format and required pairs
+        run: |
+          declare -A groups
+
+          while read -r path; do
+            file=$(basename "$path")
+            base="${file%.*}"
+            ext="${file##*.}"
+
+            # Check filename format: <username>-<testname>
+            if [[ ! "$base" =~ ^[A-Za-z0-9_-]+-[A-Za-z0-9_-]+$ ]]; then
+              echo "❌ Invalid filename: $file"
+              echo "Expected: <username>-<testname>.{lisp,out}"
+              exit 1
+            fi
+
+            # Collect extensions for the same base name
+            groups["$base"]+="$ext "
+          done <<< "${{ steps.changed.outputs.files }}"
+
+          # Validate each pair has both extensions
+          for base in "${!groups[@]}"; do
+            exts="${groups[$base]}"
+            if [[ "$exts" != *"lisp"* || "$exts" != *"out"* ]]; then
+              echo "❌ Missing pair for: $base"
+              echo "Found: $exts"
+              echo "Expected both: $base.lisp and $base.out"
+              exit 1
+            fi
+          done
+
+          echo "✔ All benchmark files are valid."
